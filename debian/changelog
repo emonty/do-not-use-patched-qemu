@@ -1,3 +1,9 @@
+qemu (1:2.5+dfsg-5ubuntu11) xenial; urgency=medium
+
+  * Add support for vhd images that work on xenserver.
+
+ -- Monty Taylor <mordred@inaugust.com>  Wed, 26 Apr 2017 15:44:57 -0500
+
 qemu (1:2.5+dfsg-5ubuntu10) xenial; urgency=medium
 
   * qemu-system-s390x only available on s390x, so qemu-system should only

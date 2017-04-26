@@ -28,3 +28,4 @@ CVE-2016-2198.patch
 block-set-device-list-tqe-prev-to-NULL
 vhost-user-interrupt-management-fixes.patch
 qemu-seccomp-sysinfo.patch
+xenserver-support.patch

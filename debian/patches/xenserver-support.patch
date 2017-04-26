@@ -1,0 +1,90 @@
+Index: qemu-2.5+dfsg/block/vpc.c
+===================================================================
+--- qemu-2.5+dfsg.orig/block/vpc.c
++++ qemu-2.5+dfsg/block/vpc.c
+@@ -762,6 +762,8 @@ static int vpc_create(const char *filena
+     uint8_t buf[1024];
+     VHDFooter *footer = (VHDFooter *) buf;
+     char *disk_type_param;
++    int xenserver_vhd;
++    char creator_app[4];
+     int i;
+     uint16_t cyls = 0;
+     uint8_t heads = 0;
+@@ -789,6 +791,20 @@ static int vpc_create(const char *filena
+     } else {
+         disk_type = VHD_DYNAMIC;
+     }
++    /*
++     *  XenServer needs the creator_app to be set to "tap" to be able to
++     *  consume a VHD image. Use that if the user requested.
++     *  Also, the string in the struct below is not null-terminated but
++     *  fixed-length, so 4 is not a bug.
++     */
++    memset(creator_app, 0, 4);
++    xenserver_vhd = qemu_opt_get_book(opts, BLOCK_OPT_XENSERVER, 0);
++    if (xenserver_vhd) {
++	strncpy(creator_app, "tap", 3);
++    } else{
++        /* TODO Check if "qemu" creator_app is ok for VPC */
++	strncpy(creator_app, "qemu", 4);
++    }
+ 
+     ret = bdrv_create_file(filename, opts, &local_err);
+     if (ret < 0) {
+@@ -832,8 +848,7 @@ static int vpc_create(const char *filena
+     memset(buf, 0, 1024);
+ 
+     memcpy(footer->creator, "conectix", 8);
+-    /* TODO Check if "qemu" creator_app is ok for VPC */
+-    memcpy(footer->creator_app, "qemu", 4);
++    memcpy(footer->creator_app, creator_app, 4);
+     memcpy(footer->creator_os, "Wi2k", 4);
+ 
+     footer->features = cpu_to_be32(0x02);
+@@ -845,9 +860,15 @@ static int vpc_create(const char *filena
+     }
+     footer->timestamp = cpu_to_be32(time(NULL) - VHD_TIMESTAMP_BASE);
+ 
+-    /* Version of Virtual PC 2007 */
+-    footer->major = cpu_to_be16(0x0005);
+-    footer->minor = cpu_to_be16(0x0003);
++    if (xenserver_vhd) {
++	/* Tell XenServer there is no batmap */
++        footer->major = cpu_to_be16(0x0000);
++        footer->minor = cpu_to_be16(0x0000);
++    } else {
++        /* Version of Virtual PC 2007 */
++        footer->major = cpu_to_be16(0x0005);
++        footer->minor = cpu_to_be16(0x0003);
++    }
+     footer->orig_size = cpu_to_be64(total_size);
+     footer->current_size = cpu_to_be64(total_size);
+     footer->cyls = cpu_to_be16(cyls);
+@@ -914,6 +935,14 @@ static QemuOptsList vpc_create_opts = {
+                 "Type of virtual hard disk format. Supported formats are "
+                 "{dynamic (default) | fixed} "
+         },
++        {
++            .name = BLOCK_OPT_XENSERVER,
++            .type = QEMU_OPT_BOOL,
++            .help =
++                "Whether to set metadata needed by XenServer to be able to "
++		" consume the image. (Results in 'tap' being set as the "
++		" creator_app in the header/footer)"
++        },
+         { /* end of list */ }
+     }
+ };
+Index: qemu-2.5+dfsg/include/block/block_int.h
+===================================================================
+--- qemu-2.5+dfsg.orig/include/block/block_int.h
++++ qemu-2.5+dfsg/include/block/block_int.h
+@@ -50,6 +50,7 @@
+ #define BLOCK_OPT_TABLE_SIZE        "table_size"
+ #define BLOCK_OPT_PREALLOC          "preallocation"
+ #define BLOCK_OPT_SUBFMT            "subformat"
++#define BLOCK_OPT_XENSERVER         "xenserver"
+ #define BLOCK_OPT_COMPAT_LEVEL      "compat"
+ #define BLOCK_OPT_LAZY_REFCOUNTS    "lazy_refcounts"
+ #define BLOCK_OPT_ADAPTER_TYPE      "adapter_type"
