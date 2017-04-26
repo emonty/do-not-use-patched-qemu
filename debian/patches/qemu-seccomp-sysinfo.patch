@@ -1,0 +1,76 @@
+From MAILER-DAEMON Mon Mar 07 04:35:06 2016
+Received: from list by lists.gnu.org with archive (Exim 4.71)
+	id 1acrZC-0008Pf-0e
+	for mharc-qemu-devel@gnu.org; Mon, 07 Mar 2016 04:35:06 -0500
+Received: from eggs.gnu.org ([2001:4830:134:3::10]:57011)
+	by lists.gnu.org with esmtp (Exim 4.71)
+	(envelope-from <mrezanin@redhat.com>) id 1acrZ7-0008On-3m
+	for qemu-devel@nongnu.org; Mon, 07 Mar 2016 04:35:04 -0500
+Received: from Debian-exim by eggs.gnu.org with spam-scanned (Exim 4.71)
+	(envelope-from <mrezanin@redhat.com>) id 1acrZ3-0003DW-1J
+	for qemu-devel@nongnu.org; Mon, 07 Mar 2016 04:35:01 -0500
+Received: from mx1.redhat.com ([209.132.183.28]:51044)
+	by eggs.gnu.org with esmtp (Exim 4.71)
+	(envelope-from <mrezanin@redhat.com>) id 1acrZ2-0003DJ-S1
+	for qemu-devel@nongnu.org; Mon, 07 Mar 2016 04:34:56 -0500
+Received: from int-mx11.intmail.prod.int.phx2.redhat.com
+	(int-mx11.intmail.prod.int.phx2.redhat.com [10.5.11.24])
+	by mx1.redhat.com (Postfix) with ESMTPS id A5A8B8AE72
+	for <qemu-devel@nongnu.org>; Mon,  7 Mar 2016 09:34:55 +0000 (UTC)
+Received: from lws-ntb.brq.redhat.com (ovpn-116-58.ams2.redhat.com
+	[10.36.116.58])
+	by int-mx11.intmail.prod.int.phx2.redhat.com (8.14.4/8.14.4) with ESMTP
+	id u279Yr4d025240; Mon, 7 Mar 2016 04:34:54 -0500
+From: mrezanin@redhat.com
+To: qemu-devel@nongnu.org
+Date: Mon,  7 Mar 2016 10:34:46 +0100
+Message-Id: <1457343286-16019-1-git-send-email-mrezanin@redhat.com>
+X-Scanned-By: MIMEDefang 2.68 on 10.5.11.24
+X-detected-operating-system: by eggs.gnu.org: GNU/Linux 3.x
+X-Received-From: 209.132.183.28
+Cc: Miroslav Rezanina <mrezanin@redhat.com>, armbru@redhat.com
+Subject: [Qemu-devel] [PATCH] Whitelist sysinfo call
+X-BeenThere: qemu-devel@nongnu.org
+X-Mailman-Version: 2.1.14
+Precedence: list
+List-Id: <qemu-devel.nongnu.org>
+List-Unsubscribe: <https://lists.nongnu.org/mailman/options/qemu-devel>,
+	<mailto:qemu-devel-request@nongnu.org?subject=unsubscribe>
+List-Archive: <http://lists.nongnu.org/archive/html/qemu-devel>
+List-Post: <mailto:qemu-devel@nongnu.org>
+List-Help: <mailto:qemu-devel-request@nongnu.org?subject=help>
+List-Subscribe: <https://lists.nongnu.org/mailman/listinfo/qemu-devel>,
+	<mailto:qemu-devel-request@nongnu.org?subject=subscribe>
+X-List-Received-Date: Mon, 07 Mar 2016 09:35:04 -0000
+Content-Length: 710
+Lines: 28
+
+From: Miroslav Rezanina <mrezanin@redhat.com>
+
+Newer version of nss-softokn libraries (> 3.16.2.3) use sysinfo call
+so qemu using rbd image hang after start when run in sandbox mode.
+
+To allow using rbd images in sandbox mode we have to whitelist it.
+
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ qemu-seccomp.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/qemu-seccomp.c b/qemu-seccomp.c
+index 2866e3c..e29fca1 100644
+--- a/qemu-seccomp.c
++++ b/qemu-seccomp.c
+@@ -250,6 +250,7 @@ static const struct QemuSeccompSyscall seccomp_whitelist[] = {
+ #ifdef HAVE_CACHEFLUSH
+     { SCMP_SYS(cacheflush), 240 },
+ #endif
++    { SCMP_SYS(sysinfo), 240 },
+ };
+ 
+ int seccomp_start(void)
+-- 
+2.5.0
+
+
+

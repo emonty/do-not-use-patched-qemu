@@ -1,0 +1,110 @@
+commit f8aa905a4fec89863c82de4186352447d851871e
+Author: Jeff Cody <jcody@redhat.com>
+Date:   Mon Feb 1 20:33:10 2016 -0500
+
+    block: set device_list.tqe_prev to NULL on BDS removal
+    
+    This fixes a regression introduced with commit 3f09bfbc7.  Multiple
+    bugs arise in conjunction with live snapshots and mirroring operations
+    (which include active layer commit).
+    
+    After a live snapshot occurs, the active layer and the base layer both
+    have a non-NULL tqe_prev field in the device_list, although the base
+    node's tqe_prev field points to a NULL entry.  This non-NULL tqe_prev
+    field occurs after the bdrv_append() in the external snapshot calls
+    change_parent_backing_link().
+    
+    In change_parent_backing_link(), when the previous active layer is
+    removed from device_list, the device_list.tqe_prev pointer is not
+    set to NULL.
+    
+    The operating scheme in the block layer is to indicate that a BDS belongs
+    in the bdrv_states device_list iff the device_list.tqe_prev pointer
+    is non-NULL.
+    
+    This patch does two things:
+    
+    1.) Introduces a new block layer helper bdrv_device_remove() to remove a
+        BDS from the device_list, and
+    2.) uses that new API, which also fixes the regression once used in
+        change_parent_backing_link().
+    
+    Signed-off-by: Jeff Cody <jcody@redhat.com>
+    Message-id: 0cd51e11c0666c04ddb7c05293fe94afeb551e89.1454376655.git.jcody@redhat.com
+    Reviewed-by: Max Reitz <mreitz@redhat.com>
+    Signed-off-by: Max Reitz <mreitz@redhat.com>
+
+Index: qemu/block.c
+===================================================================
+--- qemu.orig/block.c
++++ qemu/block.c
+@@ -1976,21 +1976,25 @@ void bdrv_close_all(void)
+     }
+ }
+ 
++/* Note that bs->device_list.tqe_prev is initially null,
++ * and gets set to non-null by QTAILQ_INSERT_TAIL().  Establish
++ * the useful invariant "bs in bdrv_states iff bs->tqe_prev" by
++ * resetting it to null on remove.  */
++void bdrv_device_remove(BlockDriverState *bs)
++{
++    QTAILQ_REMOVE(&bdrv_states, bs, device_list);
++    bs->device_list.tqe_prev = NULL;
++}
++
+ /* make a BlockDriverState anonymous by removing from bdrv_state and
+  * graph_bdrv_state list.
+    Also, NULL terminate the device_name to prevent double remove */
+ void bdrv_make_anon(BlockDriverState *bs)
+ {
+-    /*
+-     * Take care to remove bs from bdrv_states only when it's actually
+-     * in it.  Note that bs->device_list.tqe_prev is initially null,
+-     * and gets set to non-null by QTAILQ_INSERT_TAIL().  Establish
+-     * the useful invariant "bs in bdrv_states iff bs->tqe_prev" by
+-     * resetting it to null on remove.
+-     */
++    /* Take care to remove bs from bdrv_states only when it's actually
++     * in it. */
+     if (bs->device_list.tqe_prev) {
+-        QTAILQ_REMOVE(&bdrv_states, bs, device_list);
+-        bs->device_list.tqe_prev = NULL;
++        bdrv_device_remove(bs);
+     }
+     if (bs->node_name[0] != '\0') {
+         QTAILQ_REMOVE(&graph_bdrv_states, bs, node_list);
+@@ -2031,7 +2035,7 @@ static void change_parent_backing_link(B
+         if (!to->device_list.tqe_prev) {
+             QTAILQ_INSERT_BEFORE(from, to, device_list);
+         }
+-        QTAILQ_REMOVE(&bdrv_states, from, device_list);
++        bdrv_device_remove(from);
+     }
+ }
+ 
+Index: qemu/blockdev.c
+===================================================================
+--- qemu.orig/blockdev.c
++++ qemu/blockdev.c
+@@ -2384,8 +2384,7 @@ void qmp_x_blockdev_remove_medium(const
+ 
+     /* This follows the convention established by bdrv_make_anon() */
+     if (bs->device_list.tqe_prev) {
+-        QTAILQ_REMOVE(&bdrv_states, bs, device_list);
+-        bs->device_list.tqe_prev = NULL;
++        bdrv_device_remove(bs);
+     }
+ 
+     blk_remove_bs(blk);
+Index: qemu/include/block/block.h
+===================================================================
+--- qemu.orig/include/block/block.h
++++ qemu/include/block/block.h
+@@ -196,6 +196,7 @@ int bdrv_create(BlockDriver *drv, const
+ int bdrv_create_file(const char *filename, QemuOpts *opts, Error **errp);
+ BlockDriverState *bdrv_new_root(void);
+ BlockDriverState *bdrv_new(void);
++void bdrv_device_remove(BlockDriverState *bs);
+ void bdrv_make_anon(BlockDriverState *bs);
+ void bdrv_swap(BlockDriverState *bs_new, BlockDriverState *bs_old);
+ void bdrv_append(BlockDriverState *bs_new, BlockDriverState *bs_top);

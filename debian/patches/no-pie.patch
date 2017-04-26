@@ -1,0 +1,22 @@
+Description: no pie for relocatable LD calls, with toolchain defaulting to pie
+Author: Dimitri John Ledkov <xnox@ubuntu.com>
+
+Index: qemu-2.5+dfsg/rules.mak
+===================================================================
+--- qemu-2.5+dfsg.orig/rules.mak
++++ qemu-2.5+dfsg/rules.mak
+@@ -110,8 +110,12 @@ module-common.o: CFLAGS += $(DSO_OBJ_CFL
+ 	@# Copy to build root so modules can be loaded when program started without install
+ 	$(if $(findstring /,$@),$(call quiet-command,cp $@ $(subst /,-,$@), "  CP    $(subst /,-,$@)"))
+ 
+-
+-LD_REL := $(CC) -nostdlib -Wl,-r
++ifeq (,$(shell $(CC) -fsyntax-only -no-pie -xc /dev/null 2>&1))
++no_pie:=-no-pie
++else
++no_pie:=
++endif
++LD_REL := $(CC) $(no_pie) -nostdlib -Wl,-r
+ 
+ %.mo:
+ 	$(call quiet-command,$(LD_REL) -o $@ $^,"  LD -r $(TARGET_DIR)$@")
